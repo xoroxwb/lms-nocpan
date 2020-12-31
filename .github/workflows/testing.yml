@@ -26,6 +26,7 @@ jobs:
       # Runs a set of commands using the runners shell
       - name: Run a multi-line script
         run: |
-          find /home -name update.sh
+          find /home -name update.sh || true
+          pwd
           #chmod +x ./github/update.sh
           #sh ./github/update.sh
