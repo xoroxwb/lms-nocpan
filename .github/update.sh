@@ -1,7 +1,7 @@
 #!/bin/sh
 
-VERSION=$(fgrep "our \$VERSION" /usr/local/slimserver/slimserver.pl 2>/dev/null | cut -d"'" -f2 || echo '0.0.0')
-REVISION=$(head -n 1 slimserver/revision.txt 2>/dev/null || echo '0000000000')
+VERSION=$(fgrep "our \$VERSION" ${GITHUB_WORKSPACE}/slimserver.pl 2>/dev/null | cut -d"'" -f2 || echo '0.0.0')
+REVISION=$(head -n 1 ${GITHUB_WORKSPACE}/revision.txt 2>/dev/null || echo '0000000000')
 
 echo "Current Version is: $VERSION r${REVISION}"
 
