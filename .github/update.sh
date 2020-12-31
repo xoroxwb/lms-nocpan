@@ -47,7 +47,13 @@ if [ "$NEW_REVISION" -eq "$REVISION" ]
 then
 	echo "Already latest version, nothing todo."
 	exit 0
+else
+	echo "update found."
+	echo "old: ${VERSION}-r${REVISION}"
+	echo "new: ${NEW_VERSION}-r${NEW_REVISION}"
 fi
+
+
 
 echo "Downloading update from ${NEW_URL}"
 mkdir -p $UPDATE_TMP $BUILD_DIR
