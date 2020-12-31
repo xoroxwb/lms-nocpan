@@ -74,5 +74,10 @@ rm -fv $BUILD_DIR/Changelog7.html
 rm -fv $BUILD_DIR/icudt46*
 rm -fv $BUILD_DIR/icudt58b.dat
 
-#51.9M
 du -h $BUILD_DIR
+
+git config user.name github-actions
+git config user.email github-actions@github.com
+git add .
+git commit -m "${VERSION}-${REVISION} -> ${NEW_VERSION}-${NEW_REVISION}"
+git push
