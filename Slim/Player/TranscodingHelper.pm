@@ -167,10 +167,10 @@ sub loadConversionTables {
 # %d - samplerate: samples/s
 # %D - samplerate: ksamples/s
 
-# %C, $CHANNELS$   - channel count
+# %C, $CHANNELS$   - source channel count
 # %c, $OCHANNELS$  - output channel count
-#   , $SAMPLESIZE$ - sample size (in bits)
-#   , $SAMPLERATE$ - sample rate (in Hz)
+#     $SAMPLESIZE$ - source sample size (in bits)
+#     $SAMPLERATE$ - source sample rate (in Hz)
 # %i               - clientid
 # %I, $CLIENTID$   - clientid     ( : or . replaced by - )
 # %p               - player model
@@ -336,21 +336,12 @@ sub getConvertCommand2 {
 	my $rateLimit
 		= $rateOverride ? $rateOverride
 		: $client ? _rateLimit($client, $type, $track->bitrate) : 0;
-	RATELIMIT: if ($rateLimit) {
-		foreach (@$want) {
-			last RATELIMIT if /B/;
-		}
-		push @$want, 'B';
-	}
+
+	push @$want, 'B' if $rateLimit && !grep /B/, @$want;
 
 	# Check if we need to downsample
 	my $samplerateLimit = $song ? Slim::Player::CapabilitiesHelper::samplerateLimit($song) : 0;
-	SAMPLELIMIT: if ($samplerateLimit) {
-		foreach (@$need) {
-			last SAMPLELIMIT if /D/;
-		}
-		push @$need, 'D';
-	}
+	push @$need, 'D' if $samplerateLimit && !grep /D/, @$need;
 
 	# make sure we only test formats that are supported.
 	if ( $formatOverride ) {
@@ -365,7 +356,7 @@ sub getConvertCommand2 {
 		foreach my $type (@types) {
 			my ($format) = grep /$type/, @supportedformats;
 			@supportedformats = ($format, grep { $_ !~ $type } @supportedformats) if $format;
-		}	
+		}
 	}
 
 	# Build the full list of possible profiles
