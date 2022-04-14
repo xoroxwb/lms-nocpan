@@ -23,12 +23,22 @@ use Slim::Utils::Unicode;
 
 use constant MAXCHUNKSIZE => 32768;
 
+use constant MAX_ERRORS	=> 5;
+
+use constant DISCONNECTED => 0;
+use constant IDLE         => 1;
+use constant READY        => 2;
+use constant CONNECTING   => 3;
+use constant CONNECTED    => 4;
+
+use constant PERSISTENT   => 1;
+use constant BUFFERED     => 2;
+
 my $log       = logger('player.streaming.remote');
 my $directlog = logger('player.streaming.direct');
 my $sourcelog = logger('player.source');
 
 my $prefs = preferences('server');
-
 
 sub new {
 	my $class = shift;
@@ -42,21 +52,90 @@ sub new {
 		# return undef;
 	}
 
-	my $self = $class->open($args);
+	my $self = $class->SUPER::new($args) or do {
+		$log->error("Couldn't create socket binding to $main::localStreamAddr - $!");
+		return undef;
+	};
 
-	if (defined($self)) {
-		${*$self}{'client'}  = $args->{'client'};
-		${*$self}{'url'}     = $args->{'url'};
-	}
+	${*$self}{'client'}  = $args->{'client'};
+	${*$self}{'url'}     = $args->{'url'};
+	${*$self}{'_class'}  = $class;	
 
 	return $self;
+}
+
+sub close {
+	my $self = shift;
+
+	# call parent's ONLY when new() was made by this class, otherwise
+	# let subclass take care of socket's close (multiple inheritance)
+	$self->SUPER::close(@_) if ${*$self}{'_class'};
+	return unless my $enhanced = delete ${*$self}{'_enhanced'};
+
+	if ($enhanced->{'fh'}) {
+		# close read buffer file and remove handler
+		Slim::Networking::Select::removeRead($self);
+		$enhanced->{'rfh'}->close;
+	} elsif ($enhanced->{'status'} && $enhanced->{'status'} > IDLE) {
+		# disconnect persistent session (if any)
+		$enhanced->{'session'}->disconnect;
+	}		
+}
+
+sub response {
+	my $self = shift;
+	my ($args, $request, @headers) = @_;
+
+	# HTTP headers have now been acquired in a blocking way		
+	my $enhance = $self->canEnhanceHTTP($args->{'client'}, $args->{'url'});
+	return unless $enhance;
+
+	if ($enhance == PERSISTENT || !$self->contentLength) {
+		# re-parse the request string as it might have been overloaded by subclasses
+		my $request_object = HTTP::Request->parse($request);
+		my $uri = $request_object->uri;
+
+		# re-set full uri if it is not absolute (e.g. not proxied)
+		if ($uri !~ /^https?/) {
+			my ($proto, $host, $port) = $args->{'url'} =~ m|(.+)://(?:[^\@]*\@)?([^:/]+):*(\d*)|;
+			$request_object->uri("$proto://$host" . ($port ? ":$port" : '') . $uri);
+		}	
+
+		my ($first) = $self->contentRange =~ /(\d+)-/;
+		my $length = $self->contentLength;
+		
+		${*$self}{'_enhanced'} = {
+			'session' => Slim::Networking::Async::HTTP->new,
+			'request' => $request_object,
+			'errors'  => 0,
+			'max'     => $self->contentLength ? MAX_ERRORS : 1,
+			'status'  => IDLE,
+			'first'   => $first // 0,
+			'length'  => $length,
+			'reader'  => \&readPersistentChunk,
+		};
+
+		main::INFOLOG && $log->is_info && $log->info("Using Persistent service for $args->{'url'}");
+	} else {	
+		# enable fast download of body to a file from which we'll read further data
+		# but the switch of socket handler can only be done within _sysread otherwise
+		# we will timeout when there is a pipeline with a callback
+		${*$self}{'_enhanced'} = {
+			'fh'      => File::Temp->new( DIR => Slim::Utils::Misc::getTempDir, SUFFIX => '.buf' ),
+			'reader'  => \&readBufferedChunk,
+		};
+		open ${*$self}{'_enhanced'}->{'rfh'}, '<', ${*$self}{'_enhanced'}->{'fh'}->filename;
+		binmode(${*$self}{'_enhanced'}->{'rfh'});
+
+		main::INFOLOG && $log->info("Using Buffered service for $args->{'url'}");
+	}
 }
 
 sub request {
 	my $self = shift;
 	my $args  = shift;
 	my $song = $args->{'song'};
-	my $track = $song->track;
+	my $track = $song->currentTrack;
 	my $processor = $track->processors($song->wantFormat);
 
 	# no other guidance, define AudioBlock to make sure that audio_offset is skipped in requestString
@@ -69,40 +148,42 @@ sub request {
 	if (!defined $song->initialAudioBlock && Slim::Formats->loadTagFormatForType($track->content_type)) {
 		my $formatClass = Slim::Formats->classForFormat($track->content_type);
 		my $seekdata = $song->seekdata || {};
-		
+		open (my $fh, '<', $track->initial_block_fn) if $track->initial_block_fn;
+		binmode $fh if $fh;
+
 		if ($formatClass->can('findFrameBoundaries')) {
-			my $offset = $formatClass->findFrameBoundaries($track->initial_block_fh, $seekdata->{sourceStreamOffset} || 0, $seekdata->{timeOffset} || 0);
+			my $offset = $formatClass->findFrameBoundaries($fh, $seekdata->{sourceStreamOffset} || 0, $seekdata->{timeOffset} || 0);
 			$seekdata->{sourceStreamOffset} = $offset if $offset;
 		}
-		
-		if ($formatClass->can('getInitialAudioBlock')) {
-			$song->initialAudioBlock($formatClass->getInitialAudioBlock($track->initial_block_fh, $track, $seekdata->{timeOffset} || 0));
-		}	
-		
-		main::DEBUGLOG && $log->debug("building new header");	
-	} 
-	else {
-		$song->initialAudioBlock('');
-	}	
 
-	# all set for opening the HTTP object
+		if ($formatClass->can('getInitialAudioBlock')) {
+			$song->initialAudioBlock($formatClass->getInitialAudioBlock($fh, $track, $seekdata->{timeOffset} || 0));
+		}
+		
+		$song->initialAudioBlock('') unless defined $song->initialAudioBlock;
+
+		$fh->close if $fh;
+		main::DEBUGLOG && $log->debug("building new header");
+	}
+
+	# all set for opening the HTTP object, but only handle the one non-redirected call
 	$self = $self->SUPER::request($args);
-	return unless $self;
+	return $self if !$self || exists ${*$self}{'initialAudioBlockRef'};
 
 	# setup audio pre-process if required
 	my $blockRef = \($song->initialAudioBlock);
 	(${*$self}{'audio_process'}, ${*$self}{'audio_stash'}) = $processor->{'init'}->($blockRef) if $processor->{'init'};
-	
-	# set initial block to be sent 
+
+	# set initial block to be sent
 	${*$self}{'initialAudioBlockRef'} = $blockRef;
 	${*$self}{'initialAudioBlockRemaining'} = length $$blockRef;
 
 	# dynamic headers need to be re-calculated every time 
 	$song->initialAudioBlock(undef) if $processor->{'initial_block_type'};
-		
-	main::DEBUGLOG && $log->debug("streaming $args->{url} with header of ", length $$blockRef, " from ", 
+
+	main::DEBUGLOG && $log->debug("streaming $args->{url} with header of ", length $$blockRef, " from ",
 								  $song->seekdata ? $song->seekdata->{sourceStreamOffset} || 0 : $track->audio_offset,
-								  $processor->{'init'} ? 'with a processor' : ''); 
+								  $processor->{'init'} ? 'with a processor' : '');
 
 	return $self;
 }
@@ -118,7 +199,7 @@ sub readMetaData {
 
 	while ($byteRead == 0) {
 
-		$byteRead = $self->_sysread($metadataSize, 1);
+		$byteRead = readChunk($self, $metadataSize, 1);
 
 		if ($!) {
 
@@ -127,7 +208,7 @@ sub readMetaData {
 			 	#$log->warn("Warning: Metadata byte not read! $!");
 			 	return;
 
-			 } 
+			 }
 			 else {
 
 				#$log->debug("Metadata byte not read, trying again: $!");
@@ -147,7 +228,7 @@ sub readMetaData {
 
 		do {
 			$metadatapart = '';
-			$byteRead = $self->_sysread($metadatapart, $metadataSize);
+			$byteRead = readChunk($self, $metadatapart, $metadataSize);
 
 			if ($!) {
 				if ($! ne "Unknown error" && $! != EWOULDBLOCK && $! != EINTR) {
@@ -155,7 +236,7 @@ sub readMetaData {
 					#$log->info("Metadata bytes not read! $!");
 					return;
 
-				} 
+				}
 				else {
 
 					#$log->info("Metadata bytes not read, trying again: $!");
@@ -179,6 +260,13 @@ sub getFormatForURL {
 	my $url = shift;
 
 	return Slim::Music::Info::typeFromSuffix($url);
+}
+
+sub currentTrackHandler {
+	my ($class, $self, $track) = @_;
+
+	# re-evaluate as we might have been upgraded to HTTPS
+	return $class ne __PACKAGE__ ? $class : Slim::Player::ProtocolHandlers->handlerForURL($track->url);
 }
 
 sub parseMetadata {
@@ -313,8 +401,15 @@ sub parseMetadata {
 	return undef;
 }
 
+sub canEnhanceHTTP {
+	return $prefs->get('useEnhancedHTTP');
+}	
+
 sub canDirectStream {
-	my ($classOrSelf, $client, $url, $inType) = @_;
+	my ($class, $client, $url, $inType) = @_;
+	
+	# when persistent is used, we won't direct stream to enable retries
+	return 0 if $class->canEnhanceHTTP($client, $url);
 
 	# When synced, we don't direct stream so that the server can proxy a single
 	# stream for all players
@@ -346,58 +441,185 @@ sub canDirectStream {
 # TODO: what happens if this method is overloaded in a sub-class that does not call its parents method
 sub canDirectStreamSong {
 	my ( $class, $client, $song ) = @_;
-	
+
 	# can't go direct if we are synced or proxy is set by user
-	my $direct = $class->canDirectStream( $client, $song->streamUrl(), $class->getFormatForURL() );
+	my $direct = $class->canDirectStream( $client, $song->streamUrl, $class->getFormatForURL );
 	return 0 unless $direct;
-	
-	my $processor = $song->track->processors($song->wantFormat);
+
+	my $processor = $song->currentTrack->processors($song->wantFormat);
 
 	# no header or stripHeader flag has precedence
 	return $direct if $song->stripHeader || !$processor;
-	
+
 	# with dynamic header 2, always go direct otherwise only when not seeking
 	if ($processor->{'initial_block_type'} == Slim::Schema::RemoteTrack::INITIAL_BLOCK_ALWAYS || $song->seekdata) {
 		main::INFOLOG && $directlog->info("Need to add header, cannot stream direct");
 		return 0;
-	}	
-			
+	}
+
 	return $direct;
 }
 
-# we need that call structure to make sure that SUPER calls the 
+sub readChunk {
+	my $self  = $_[0];
+	my $enhanced = ${*$self}{'_enhanced'} || return $self->_sysread($_[1], $_[2], $_[3]);
+	return $enhanced->{'reader'}->($enhanced, $self, $_[1], $_[2], $_[3]);
+}
+
+sub readPersistentChunk {
+	my $enhanced = shift;	
+	my $self  = $_[0];
+
+	# read directly from socket if primary connection is still active
+	if ($enhanced->{'status'} == IDLE) {
+		my $readLength = $self->_sysread($_[1], $_[2], $_[3]);
+		$enhanced->{'first'} += $readLength;
+	
+		# return sysread's result UNLESS we reach eof before expected length
+		return $readLength unless defined($readLength) && !$readLength && $enhanced->{'first'} != $self->contentLength;
+	}					 
+
+	# all received using persistent connection
+	return 0 if $enhanced->{'status'} == DISCONNECTED;
+
+	# if we are not streaming, need to (re)start a session
+	if ( $enhanced->{'status'} <= READY ) {
+		my $request = $enhanced->{'request'}; 
+		my $last = $enhanced->{'length'} - 1 if $enhanced->{'length'};
+		
+		$request->header( 'Range', "bytes=$enhanced->{'first'}-$last");
+		$enhanced->{'status'} = CONNECTING;		
+		$enhanced->{'lastSeen'} = undef;
+
+		$log->warn("Persistent streaming from $enhanced->{'first'} for ${*$self}{'url'}");
+
+		$enhanced->{'session'}->send_request( {
+			request   => $request,
+			onHeaders => sub {
+				my $headers = shift->response->headers;
+				$enhanced->{'length'} = $1 if $headers->header('Content-Range') =~ /^bytes\s+\d+-\d+\/(\d+)/i;
+				$enhanced->{'length'} ||= $headers->header('Content-Length') if $headers->header('Content-Length');
+				$enhanced->{'status'} = CONNECTED;
+				$enhanced->{'errors'} = 0;
+			},
+			onError  => sub {
+				$enhanced->{'session'}->disconnect;
+				$enhanced->{'status'} = READY;
+				$enhanced->{'errors'}++;
+				$log->error("cannot open session for ${*$self}{'url'} $_[1] ");
+			},
+		} );
+	}
+
+	# the child socket is non-blocking so we can safely call read_entity_body which calls sysread
+	# if buffer is empty. This is normally a callback used when select() indicates pending bytes
+	my $bytes = $enhanced->{'session'}->socket->read_entity_body($_[1], $_[2]) if $enhanced->{'status'} == CONNECTED;
+	
+	# note that we use EINTR with empty buffer because EWOULDBLOCK allows Source::_readNextChunk
+	# to do an addRead on $self and would not work as primary socket is closed
+	if ( $bytes && $bytes != -1 ) {
+		$enhanced->{'first'} += $bytes;
+		$enhanced->{'lastSeen'} = time();
+		return $bytes;
+	} elsif ( $bytes == -1 || (!defined $bytes && $enhanced->{'errors'} < $enhanced->{'max'} && 
+							  ($enhanced->{'status'} != CONNECTED || $! == EINTR || $! == EWOULDBLOCK) && 
+							  (!defined $enhanced->{'lastSeen'} || time() - $enhanced->{'lastSeen'} < 5)) ) {
+		$! = EINTR;
+		main::DEBUGLOG && $log->is_debug && $log->debug("need to wait for ${*$self}{'url'}");
+		return undef;
+	} elsif ( $enhanced->{'first'} == $enhanced->{'length'} || $enhanced->{'errors'} >= $enhanced->{'max'} ) {
+		$enhanced->{'session'}->disconnect;
+		$enhanced->{'status'} = DISCONNECTED;
+		main::INFOLOG && $log->is_info && $log->info("end of ${*$self}{'url'} s:", time() - $enhanced->{'lastSeen'}, " e:$enhanced->{'errors'}");
+		return 0;
+	} else {
+		$log->warn("unexpected connection close at $enhanced->{'first'}/$enhanced->{'length'} for ${*$self}{'url'}\n\tsince:", 
+		           time() - $enhanced->{'lastSeen'}, "\n\terror:", ($! != EINTR && $! != EWOULDBLOCK) ? $! : "N/A");
+		$enhanced->{'session'}->disconnect;
+		$enhanced->{'status'} = READY;
+		$enhanced->{'errors'}++;
+		$! = EINTR;
+		return undef;
+	}
+}
+
+sub readBufferedChunk {
+	my $enhanced = shift;	
+	my $self  = $_[0];
+
+	# first, try to read from buffer file
+	my $readLength = $enhanced->{'rfh'}->read($_[1], $_[2], $_[3]);
+	return $readLength if $readLength;
+
+	# assume that close() will be called for cleanup
+	return 0 if $enhanced->{'done'};
+
+	# empty file but not done yet, try to read directly
+	$readLength = $self->_sysread($_[1], $_[2], $_[3]);
+
+	# if we now have data pending, likely we have been removed from the reading loop
+	# so we have to re-insert ourselves (no need to store fresh data in buffer)
+	if ($readLength) {
+		Slim::Networking::Select::addRead($self, \&saveStream);
+		return $readLength;
+	}
+
+	# use EINTR because EWOULDBLOCK (although faster) may overwrite our addRead()
+	$! = EINTR;
+	return undef;
+}
+
+# handler for pending data in Buffered mode
+sub saveStream {
+	my $self = shift;
+	my $enhanced = ${*$self}{'_enhanced'};
+
+	my $bytes = $self->_sysread(my $data, 32768);
+	return unless defined $bytes;
+
+	if ($bytes) {
+		# need to bypass Perl's buffered IO and make sure read eof is reset
+		syswrite($enhanced->{'fh'}, $data);
+		$enhanced->{'rfh'}->seek(0, 1);
+	} else {
+		Slim::Networking::Select::removeRead($self);
+		$enhanced->{'done'} = 1;
+	}
+}
+
+# we need that call structure to make sure that SUPER calls the
 # object's parent, not the package's parent
 # see http://modernperlbooks.com/mt/2009/09/when-super-isnt.html
 sub _sysread {
-	return CORE::sysread($_[0], $_[1], $_[2], $_[3]); 
+	return CORE::sysread($_[0], $_[1], $_[2], $_[3]);
 }
 
 sub sysread {
 	my $self = $_[0];
 	my $chunkSize = $_[2];
-	
+
 	# make sure we start with an empty return buffer ...
 	$_[1] = '';
-	
+
 	# stitch header if any
 	if (my $length = ${*$self}{'initialAudioBlockRemaining'}) {
-		
+
 		my $chunkLength = $length;
 		my $chunkref;
-		
+
 		main::DEBUGLOG && $log->debug("getting initial audio block of size $length");
-		
+
 		if ($length > $chunkSize || $length < length(${${*$self}{'initialAudioBlockRef'}})) {
 			$chunkLength = $length > $chunkSize ? $chunkSize : $length;
 			my $chunk = substr(${${*$self}{'initialAudioBlockRef'}}, -$length, $chunkLength);
 			$chunkref = \$chunk;
 			${*$self}{'initialAudioBlockRemaining'} = ($length - $chunkLength);
-		} 
+		}
 		else {
 			${*$self}{'initialAudioBlockRemaining'} = 0;
 			$chunkref = ${*$self}{'initialAudioBlockRef'};
 		}
-	
+
 		$_[1] = $$chunkref;
 		return $chunkLength;
 	}
@@ -414,16 +636,16 @@ sub sysread {
 	}
 
 	my $readLength;
-	
+
 	# do not read if we are building-up too much processed audio
 	if (${*$self}{'audio_buildup'} > $chunkSize) {
-		${*$self}{'audio_buildup'} = ${*$self}{'audio_process'}->(${*$self}{'audio_stash'}, $_[1], $chunkSize); 
-	} 
-	else {	
-		$readLength = $self->_sysread($_[1], $chunkSize, length($_[1] || ''));
-		${*$self}{'audio_buildup'} = ${*$self}{'audio_process'}->(${*$self}{'audio_stash'}, $_[1], $chunkSize) if ${*$self}{'audio_process'}; 
-	}	
-	
+		${*$self}{'audio_buildup'} = ${*$self}{'audio_process'}->(${*$self}{'audio_stash'}, $_[1], $chunkSize);
+	}
+	else {
+		$readLength = readChunk($self, $_[1], $chunkSize, length($_[1] || ''));
+		${*$self}{'audio_buildup'} = ${*$self}{'audio_process'}->(${*$self}{'audio_stash'}, $_[1], $chunkSize) if ${*$self}{'audio_process'};
+	}
+
 	# use $readLength from socket for meta interval adjustement
 	if ($metaInterval && $readLength) {
 
@@ -437,22 +659,22 @@ sub sysread {
 
 			${*$self}{'metaPointer'} = 0;
 
-		} 
+		}
 		elsif ($metaPointer > $metaInterval) {
 
 			main::DEBUGLOG && $log->debug("The shoutcast metadata overshot the interval.");
 		}
 	}
-	
+
 	# when not-empty, choose return buffer length over sysread()
 	return length $_[1] if length $_[1];
-	
+
 	# we are still processing but have nothing yet to return
 	if ($readLength) {
 		$readLength = undef;
 		$! = EINTR;
 	}
-	
+
 	return $readLength;
 }
 
@@ -461,13 +683,14 @@ sub parseDirectHeaders {
 
 	my $isDebug = main::DEBUGLOG && $directlog->is_debug;
 	my $oggType;
-	
+
 	# May get a track object
 	if ( blessed($url) ) {
+		# FIXME: this does not belong here, we'd better fix the mimetotype below
 		($oggType) = $url->content_type =~ /(ogf|ogg|ops)/;
 		$url = $url->url;
 	}
-	
+
 	my $song = ${*$self}{'song'} if blessed $self;
 
 	if (!$song && $client->controller()->songStreamController()) {
@@ -495,7 +718,7 @@ sub parseDirectHeaders {
 			if ($song && !$song->bitrate) {
 				$bitrate = $1;
 				$bitrate *= 1000 if $bitrate < 8000;
-			}	
+			}
 		}
 
 		elsif ($header =~ /^icy-metaint:\s*(.+)/i) {
@@ -514,10 +737,9 @@ sub parseDirectHeaders {
 			$length = $1;
 		}
 
-		elsif ($header =~ m%^Content-Range:\s+bytes\s+(\d+)-(\d+)/(\d+)%i) {
-			$rangeLength = $3;
+		elsif ($header =~ /^Content-Range:\s+bytes\s+(\d+)-\d+\/(\d+)/i) {
 			$startOffset = $1;
-			${*$self}{'range'} = $1 . '-' . $2 if blessed $self;
+			$rangeLength = $2;
 		}
 
 		# mp3tunes metadata, this is a bit of hack but creating
@@ -590,6 +812,9 @@ sub parseHeaders {
 
 	my ($title, $bitrate, $metaint, $redir, $contentType, $length, $body) = $self->parseDirectHeaders($client, $url, @_);
 
+	# we should not parse anything before we have reached target
+	return if ${*$self}{'redirect'} = $redir;
+	
 	if ($contentType) {
 		if (($contentType =~ /text/i) && !($contentType =~ /text\/xml/i)) {
 			# webservers often lie about playlists.  This will
@@ -602,10 +827,12 @@ sub parseHeaders {
 		Slim::Music::Info::setContentType( $url, $contentType );
 	}
 
-	${*$self}{'redirect'} = $redir;
-
 	${*$self}{'contentLength'} = $length if $length;
 	${*$self}{'song'}->isLive($length ? 0 : 1) if !$redir;
+
+	# capture this here as our parseDirectHeader might be overloaded
+	my ($range) = grep /^Content-Range:/i, @_;
+	(${*$self}{'contentRange'}) = $range =~ /^Content-Range:\s*bytes\s*(.*)/i;
 
 	# Always prefer the title returned in the headers of a radio station
 	if ( $title ) {
@@ -628,7 +855,7 @@ sub parseHeaders {
 
 		${*$self}{'bitrate'} = $bitrate;
 		Slim::Music::Info::setBitrate( $self->infoUrl, $bitrate );
-	} 
+	}
 	elsif ( !$self->bitrate ) {
 		# Bitrate may have been set in Scanner by reading the mp3 stream
 		$bitrate = ${*$self}{'bitrate'} = Slim::Music::Info::getBitrate( $url );
@@ -684,22 +911,18 @@ sub requestString {
 	my $post   = shift;
 	my $seekdata = shift;
 
-	my ($server, $port, $path, $user, $password) = Slim::Utils::Misc::crackURL($url);
+	my ($server, $port, $path, $user, $password, $proxied) = Slim::Utils::Misc::crackURL($url);
 
 	# Use full path for proxy servers
-	my $proxy = $prefs->get('webproxy');
-
-	if ( $proxy && $server !~ /(?:localhost|127.0.0.1)/ ) {
-		$path = "http://$server:$port$path";
-	}
+	$path = $proxied if $proxied;
 
 	my $type = $post ? 'POST' : 'GET';
 
 	# Although the port can be part of the Host: header, some hosts (such
 	# as online.wsj.com don't like it, and will infinitely redirect.
 	# According to the spec, http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
-	# The port is optional if it's 80, so follow that rule.
-	my $host = $port == 80 ? $server : "$server:$port";
+	# The port is optional if it's standard 80/443, so follow that rule.
+	my $host = (($url =~ /^http:/ && $port == 80) || ($url =~ /^https:/ && $port == 443)) ? $server : "$server:$port";
 
 	# Special case, for the fallback-alarm, disable Icy Metadata, or our own
 	# server will try and send it
@@ -726,13 +949,14 @@ sub requestString {
 	# Always add Range to exclude trailing metadata or garbage (aif/mp4...)
 	if ($client) {
 		my $song = $client->streamingSong;
+		my $track = $song->currentTrack;
 		$client->songBytes(0);
-		
+
 		my $first = $seekdata->{restartOffset} || int( $seekdata->{sourceStreamOffset} );
-		$first ||= $song->track->audio_offset if $song->stripHeader || defined $song->initialAudioBlock;
+		$first ||= $track->audio_offset if $song->stripHeader || defined $song->initialAudioBlock;
 		$request .= $CRLF . 'Range: bytes=' . ($first || 0) . '-';
-		$request .= $song->track->audio_offset + $song->track->audio_size - 1 if $song->track->audio_size;
-		
+		$request .= $track->audio_offset + $track->audio_size - 1 if $track->audio_size;
+
 		if ($first) {
 
 			if (defined $seekdata->{timeOffset}) {
@@ -741,7 +965,7 @@ sub requestString {
 				$client->master()->remoteStreamStartTime( Time::HiRes::time() - $seekdata->{timeOffset} );
 			}
 
-			$client->songBytes( $first - ($song->stripHeader ? $song->track->audio_offset : 0) );
+			$client->songBytes( $first - ($song->stripHeader ? $track->audio_offset : 0) );
 		}
 	}
 
@@ -752,7 +976,7 @@ sub requestString {
 		$request .= $CRLF . sprintf("Content-Length: %d", length($post));
 		$request .= $CRLF . $CRLF . $post . $CRLF;
 
-	} 
+	}
 	else {
 		$request .= $CRLF . $CRLF;
 	}
@@ -813,8 +1037,11 @@ sub getMetadataFor {
 	}
 
 	# Check for parsed WMA metadata, this is here because WMA may
-	# use HTTP protocol handler
-	if ( my $song = $client->playingSong() ) {
+	# use HTTP protocol handler. Check for container and track
+	my $song = $client->playingSong();
+	my $current = ($song->track->url eq $url || $song->currentTrack->url eq $url) if $song;
+
+	if ( $current ) {
 		if ( my $meta = $song->pluginData('wmaMeta') ) {
 			my $data = {};
 			if ( $meta->{artist} ) {
@@ -852,7 +1079,7 @@ sub getMetadataFor {
 	# Remember playlist URL
 	my $playlistURL = $url;
 
-	# Check for radio URLs with cached covers
+	# Check for radio or OPML feeds URLs with cached covers
 	my $cache = Slim::Utils::Cache->new();
 	my $cover = $cache->get( "remote_image_$url" );
 
@@ -890,11 +1117,11 @@ sub getMetadataFor {
 		}
 	}
 	else {
+		# make sure that protocol handler is what the $song wanted, not just the $url-based one
+		my $handler = $current ? $song->currentTrackHandler : Slim::Player::ProtocolHandlers->handlerForURL($url);
 
-		if ( (my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url)) !~ /^(?:$class|Slim::Player::Protocols::MMS|Slim::Player::Protocols::HTTPS?)$/ )  {
-			if ( $handler && $handler->can('getMetadataFor') ) {
-				return $handler->getMetadataFor( $client, $url );
-			}
+		if ( $handler && $handler !~ /^(?:$class|Slim::Player::Protocols::MMS|Slim::Player::Protocols::HTTPS?)$/ && $handler->can('getMetadataFor') ) {
+			return $handler->getMetadataFor( $client, $url );
 		}
 
 		my $type = uc( $track->content_type || '' ) . ' ' . Slim::Utils::Strings::cstring($client, 'RADIO');
@@ -976,13 +1203,13 @@ sub getSeekData {
 	$bitrate /= 1000;
 
 	main::INFOLOG && $log->info( "Trying to seek $newtime seconds into $bitrate kbps" );
-	
+
 	my $offset = int (( ( $bitrate * 1000 ) / 8 ) * $newtime);
-	$offset -= $offset % ($song->track->block_alignment || 1);
-	
+	$offset -= $offset % ($song->currentTrack->block_alignment || 1);
+
 	# this might be re-calculated by request() if direct streaming is disabled
 	return {
-		sourceStreamOffset   => $offset + $song->track->audio_offset,
+		sourceStreamOffset   => $offset + $song->currentTrack->audio_offset,
 		timeOffset           => $newtime,
 	};
 }
@@ -991,10 +1218,10 @@ sub getSeekDataByPosition {
 	my ($class, $client, $song, $bytesReceived) = @_;
 
 	my $seekdata = $song->seekdata() || {};
-		
+
 	my $position = int($seekdata->{'sourceStreamOffset'}) || 0;
-	$position ||= $song->track->audio_offset if defined $song->initialAudioBlock;
-		
+	$position ||= $song->currentTrack->audio_offset if defined $song->initialAudioBlock;
+
 	return {%$seekdata, restartOffset => $position + $bytesReceived - $song->initialAudioBlock};
 }
 

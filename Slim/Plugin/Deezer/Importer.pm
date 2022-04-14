@@ -47,6 +47,8 @@ sub isImportEnabled {
 
 		return 1 if scalar @$accounts;
 
+		$cache->set('deezer_library_fingerprint', -1, 30 * 86400);
+
 		main::INFOLOG && $log->is_info && $log->info("No Premium Deezer account found - skipping import");
 	}
 
@@ -182,7 +184,7 @@ sub scanArtists { if (main::SCANNER) {
 			Slim::Schema->forceCommit;
 
 			Slim::Schema::Contributor->add({
-				'artist' => $name,
+				'artist' => $class->normalizeContributorName($name),
 				'extid'  => 'deezer:artist:' . $artist->{id},
 			});
 

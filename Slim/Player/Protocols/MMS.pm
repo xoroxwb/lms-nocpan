@@ -47,7 +47,7 @@ sub new {
 	my $url        = $args->{'url'};
 	my $client     = $args->{'client'};
 	
-	my $self = $class->open($args);
+	my $self = $class->SUPER::new($args);
 
 	if (defined($self)) {
 		${*$self}{'client'}  = $args->{'client'};
@@ -89,7 +89,7 @@ sub randomGUID {
 }
 
 sub canDirectStream {
-	my ($classOrSelf, $client, $url, $inType) = @_;
+	my ($class, $client, $url, $inType) = @_;
 	
 	# When synced, we don't direct stream so that the server can proxy a single
 	# stream for all players
@@ -123,14 +123,10 @@ sub requestString {
 	
 	main::DEBUGLOG && $log->debug($url);
 
-	my ($server, $port, $path, $user, $password) = Slim::Utils::Misc::crackURL($url);
+	my ($server, $port, $path, $user, $password, $proxied) = Slim::Utils::Misc::crackURL($url);
 
 	# Use full path for proxy servers
-	my $proxy = $prefs->get('webproxy');
-	
-	if ( $proxy && $server !~ /(?:localhost|127.0.0.1)/ ) {
-		$path = "http://$server:$port$path";
-	}
+	$path = $proxied if $proxied;
 
 	my $host = $port == 80 ? $server : "$server:$port";
 

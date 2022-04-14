@@ -543,7 +543,7 @@ sub _cliQuery_done {
 						($subFeed->{'type'} && $subFeed->{'type'} eq 'audio') ||
 						$subFeed->{'enclosure'} ||
 						# Bug 17385 - rss feeds include description at non leaf levels
-						($subFeed->{'description'} && $subFeed->{'type'} ne 'rss')
+						($subFeed->{'description'} && $subFeed->{'type'} && $subFeed->{'type'} ne 'rss')
 					)
 				) {
 
@@ -1144,7 +1144,7 @@ sub _cliQuery_done {
 						my %merged = (%{$params}, %{$itemParams});
 
 						if ( $item->{icon} ) {
-							$hash{'icon' . ($item->{icon} =~ /^http:/ ? '' : '-id')} = proxiedImage($item->{icon});
+							$hash{'icon' . ($item->{icon} =~ /^https?:/ ? '' : '-id')} = proxiedImage($item->{icon});
 							$hasImage = 1;
 						} elsif ( $item->{image} ) {
 							$hash{'icon'} = proxiedImage($item->{image});
@@ -1309,9 +1309,15 @@ sub _cliQuery_done {
 								my %params;
 								my @vars = @{$actionParamsNeeded{$key}};
 								for (my $i = 0; $i < scalar @vars; $i += 2) {
+									# ignore items whose URL points to a code ref - Squeezeplay can't handle them
+									if (ref $item->{$vars[$i+1]}) {
+										%params = ();
+										last;
+									}
+
 									$params{$vars[$i]} = $item->{$vars[$i+1]};
 								}
-								$hash{$key} = \%params;
+								$hash{$key} = \%params if keys %params;
 							}
 						}
 

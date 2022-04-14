@@ -70,6 +70,20 @@ sub initDetails {
 		elsif ($Config{ccflags} =~ /-arch ppc/) {
 			$class->{osDetails}->{osArch} = 'ppc';
 		}
+		elsif (`uname -a` =~ /ARM64/) {
+			open(SYS, 'arch -arm64 /usr/sbin/system_profiler SPHardwareDataType -detailLevel mini 2>&1 |') or return;
+
+			while (<SYS>) {
+				if (/Chip.*(Apple .*)/) {
+					$class->{osDetails}->{'osArch'} = $1;
+					last;
+				}
+			}
+
+			close SYS;
+
+			$class->{osDetails}->{osArch} = 'Apple Silicon' if !$class->{osDetails}->{osArch};
+		}
 	}
 
 	$class->{osDetails}->{'os'}  = 'Darwin';
@@ -221,7 +235,7 @@ sub dirsFor {
 
 	} elsif ($dir eq 'playlists') {
 
-		push @dirs, catdir($class->dirsFor('music'), 'Playlists');
+		push @dirs, catdir(scalar $class->dirsFor('music'), 'Playlists');
 
 	# We might get called from some helper script (update checker)
 	} elsif ($dir eq 'libpath' && $Bin =~ m|Bin/darwin|) {

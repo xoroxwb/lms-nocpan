@@ -1009,7 +1009,6 @@ sub playlistJumpCommand {
 	if ( defined $index && $index =~ /[+-]/ ) {
 
 		if (!$isStopped) {
-			my $handler = $client->playingSong()->currentTrackHandler();
 
 			if ( ($songcount == 1 && $index eq '-1') || $index eq '+0' ) {
 				# User is trying to restart the current track
@@ -1175,7 +1174,7 @@ sub playlistSaveCommand {
 	if ($prefs->get('saveShuffled')) {
 
 		for my $shuffleitem (@{Slim::Player::Playlist::shuffleList($client)}) {
-			push @$annotatedList, Slim::Player::Playlist::song($client, $shuffleitem, 0, 0);
+			push @$annotatedList, Slim::Player::Playlist::track($client, $shuffleitem, 0, 0);
 		}
 
 	} else {
@@ -1425,6 +1424,12 @@ sub playlistXitemCommand {
 	if ( $handler && $handler->can('explodePlaylist') ) {
 		$handler->explodePlaylist($client, $path, sub {
 			my $tracks = shift;
+			# transform opml list into url array if needed
+			if (ref $tracks eq 'HASH') {
+				$tracks = [ map { 
+					$_->{play} || $_->{url} 
+				} @{$tracks->{items}} ];
+			}	
 			$client->execute(['playlist', $cmd . 'tracks' , 'listRef', $tracks, $fadeIn]);
 			$request->setStatusDone();
 		});
@@ -1729,6 +1734,39 @@ sub playlistXtracksCommand {
 		@tracks = _playlistXtracksCommand_parseSearchTerms($client, $what, $cmd);
 	}
 
+	if ( scalar @tracks && $what =~ /track\.titlesearch|contributor\.namesearch|genre\.id/i ) {
+		if ($prefs->get('useBalancedShuffle')) {
+			my $categoryMethod = 'artistName';
+			my $categoryRemoteItem = 'artist';
+
+			if ($what =~ /contributor\.namesearch/i) {
+				$categoryMethod = 'albumname';
+				$categoryRemoteItem = 'album';
+			}
+
+			my $sortList = Slim::Player::Playlist::balancedShuffle([ map {
+				my $track = $tracks[$_];
+				my $category = $track->$categoryMethod if ref $track && $track->can($categoryMethod);
+
+				if (!$categoryMethod) {
+					my $url = ref $track ? $track->url : $track;
+					my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url);
+
+					if ( $handler && $handler->can('getMetadataFor') && (my $meta = $handler->getMetadataFor($client, $url)) ) {
+						$category = $meta->{$categoryRemoteItem};
+					}
+				}
+
+				[$_, $category || ''];
+			} 0 .. $#tracks ], 'alpha');
+
+			@tracks = @tracks[@$sortList];
+		}
+		else {
+			Slim::Player::Playlist::fischer_yates_shuffle(\@tracks);
+		}
+	};
+
 	my $size;
 
 	# add or remove the found songs
@@ -1810,7 +1848,7 @@ sub playlistZapCommand {
 
 	my $zapped   = $client->string('ZAPPED_SONGS');
 	my $zapindex = defined $index ? $index : Slim::Player::Source::playingSongIndex($client);
-	my $zapsong  = Slim::Player::Playlist::song($client, $zapindex);
+	my $zaptrack  = Slim::Player::Playlist::track($client, $zapindex);
 
 	#  Remove from current playlist
 	if (Slim::Player::Playlist::count($client) > 0) {
@@ -1831,7 +1869,7 @@ sub playlistZapCommand {
 		},
 	});
 
-	$playlistObj->appendTracks([ $zapsong ]);
+	$playlistObj->appendTracks([ $zaptrack ]);
 	$playlistObj->update;
 
 	Slim::Player::Playlist::scheduleWriteOfPlaylist($client, $playlistObj);

@@ -90,19 +90,19 @@ CREDITS
 	ZH_CN	Kok-Bin Lee
 
 COPYRIGHT
-	CS	© 2001-2020 Logitech Verze 8.1.1
-	DA	© 2001-2020 Logitech - version 8.1.1
-	DE	© 2001-2020 Logitech Version 8.1.1
-	EN	© 2001-2020 Logitech Version 8.1.1
-	ES	© 2001-2020 Logitech Versión 8.1.1
-	FI	© 2001-2020 Logitechin versio 8.1.1
-	FR	© 2001-2020 Logitech Version 8.1.1
-	IT	© 2001-2020 Logitech versione 8.1.1
-	NL	© 2001-2020 Logitech versie 8.1.1
-	NO	© 2001–2011 Logitech versjon 8.1.1
-	PL	© 2001-2020 Logitech wersja 8.1.1
-	RU	© Logitech, 2001-2020. Версия 8.1.1
-	SV	© 2001–2011 Logitech Version 8.1.1
+	CS	© 2001-2020 Logitech Verze 8.2.0
+	DA	© 2001-2020 Logitech - version 8.2.0
+	DE	© 2001-2020 Logitech Version 8.2.0
+	EN	© 2001-2020 Logitech Version 8.2.0
+	ES	© 2001-2020 Logitech Versión 8.2.0
+	FI	© 2001-2020 Logitechin versio 8.2.0
+	FR	© 2001-2020 Logitech Version 8.2.0
+	IT	© 2001-2020 Logitech versione 8.2.0
+	NL	© 2001-2020 Logitech versie 8.2.0
+	NO	© 2001–2011 Logitech versjon 8.2.0
+	PL	© 2001-2020 Logitech wersja 8.2.0
+	RU	© Logitech, 2001-2020. Версия 8.2.0
+	SV	© 2001–2011 Logitech Version 8.2.0
 
 COPYRIGHT_LOGITECH
 	CS	© 2001-2020 Logitech
@@ -120,19 +120,19 @@ COPYRIGHT_LOGITECH
 	SV	© 2001-2020 Logitech
 
 VERSION
-	CS	Verze 8.1.1 / r%s
-	DA	Version 8.1.1 / r%s
-	DE	Version 8.1.1 / r%s
-	EN	Version 8.1.1 / r%s
-	ES	Versión 8.1.1 / r%s
-	FI	Versio 8.1.1 / r%s
-	FR	Version 8.1.1 / r%s
-	IT	Versione 8.1.1/r%s
-	NL	Versie 8.1.1 / r%s
-	NO	Versjon 8.1.1 / r%s
-	PL	Wersja 8.1.1 / r%s
-	RU	Версия 8.1.1 / r%s
-	SV	Version 8.1.1 / r%s
+	CS	Verze 8.2.0 / r%s
+	DA	Version 8.2.0 / r%s
+	DE	Version 8.2.0 / r%s
+	EN	Version 8.2.0 / r%s
+	ES	Versión 8.2.0 / r%s
+	FI	Versio 8.2.0 / r%s
+	FR	Version 8.2.0 / r%s
+	IT	Versione 8.2.0/r%s
+	NL	Versie 8.2.0 / r%s
+	NO	Versjon 8.2.0 / r%s
+	PL	Wersja 8.2.0 / r%s
+	RU	Версия 8.2.0 / r%s
+	SV	Version 8.2.0 / r%s
 
 CHOOSE_A_LANGUAGE
 	CS	Zvolte prosím jazyk
@@ -5692,11 +5692,11 @@ SETUP_OUTPUT_CHANNELS
 SETUP_OUTPUT_CHANNELS_DESC
 	CS	Tento přehrávač můžete nakonfigurovat, aby přehrával buď levý nebo pravý kanál. Tuto funkci můžete například využít k vytvoření stereo efektu ze 2 synchronizovaných rádií Squeezebox.
 	DA	Du kan konfigurere afspilleren til kun at spille i den venstre eller højre kanal. Dette kan bruges til at oprette et stereobillede fra to synkroniserede Squeezebox-radioer, f.eks.
-	DE	Sie können diesen Player so konfigurieren, dass er nur den linken oder rechten Kanal wiedergibt. Diese Option kann zum Beispiel verwendet werden, um ein Stereobild über zwei synchronisierte Squeezebox Radios zu erstellen.
-	EN	You can configure this player to play only the left or right channel. This can be used to create a stereo image from 2 synced Squeezebox Radios, for example.
+	DE	Sie können diesen Player so konfigurieren, dass er nur den linken oder rechten Kanal wiedergibt. Diese Option kann zum Beispiel verwendet werden, um ein Stereobild über zwei synchronisierte Squeezebox Radios zu erstellen. Die beiden Kanäle können auch zur Wiedergabe in Mono kombiniert werden.
+	EN	You can configure this player to play only the left or right channel. This can be used to create a stereo image from 2 synced Squeezebox Radios, for example. Both channels can also be combined to mono.
 	ES	Puede configurar este reproductor para que sólo reproduzca el canal izquierdo o el derecho. Se puede usar, por ejemplo, para crear una imagen estéreo a partir de dos dispositivos Squeezebox Radio sincronizados.
 	FI	Voit määrittää soittimen toistamaan vain vasemmalla tai oikealla kanavalla. Näin voidaan luoda stereovaikutelma esimerkiksi kahdella synkronoidulla Squeezebox-radiolla.
-	FR	Vous pouvez configurer cette platine pour lire uniquement le canal droit ou gauche. Cette configuration vous permet par exemple de créer une image stéréo à partir de deux radios Squeezebox synchronisées.
+	FR	Vous pouvez configurer cette platine pour lire uniquement le canal droit ou gauche. Cette configuration vous permet par exemple de créer une image stéréo à partir de deux radios Squeezebox synchronisées. Les deux canaux peuvent aussi être combinés en mono.
 	IT	È possibile configurare il lettore affinché riproduca solo il canale destro o sinistro. Ciò risulta utile ad esempio per creare un'immagine stereo da due Squeezebox Radio sincronizzate.
 	NL	Je kunt deze muziekspeler configureren zodat alleen via het linker- of rechterkanaal wordt afgespeeld. Zo kun je bijvoorbeeld 2 gesynchroniseerde Squeezebox Radio's in stereo-opstelling plaatsen.
 	NO	Du kan konfigurere spilleren slik at den kun spiller fra venstre eller høyre kanal. Slik kan du blant annet skape et stereobilde fra to synkroniserte Squeezebox Radio-spillere.
@@ -5748,6 +5748,11 @@ OUTPUT_CHANNELS_RIGHT
 	PL	Kanał prawy
 	RU	Правый канал
 	SV	Höger kanal
+
+OUTPUT_CHANNELS_COMBINED
+	DE	Beide Kanäle (Mono)
+	EN	Both Channels (Mono)
+	FR	Deux Canaux (Mono)
 
 SETUP_TRANSITIONTYPE
 	CS	Prolínání
@@ -8172,7 +8177,7 @@ SETUP_ARTISTS_BROWSE_MODES
 
 SETUP_ARTISTS_BROWSE_MODES_DESC
 	DE	Wählen Sie, ob Sie eine einzelne, konfigurierbare Liste von Interpreten haben wollen, oder eine für Album-Interpreten und eine für Alle Interpreten. Album-Interpreten führt nur Künstler auf, welche für ein Album alleine gespeichert sind, oder im ALBUMARTIST Tag vermerkt sind. Alle Interpreten listet alle Künstler aller Rollen auf (ARTIST, COMPOSER etc.). Die konfigurierbare Interpretenliste lässt Sie festlegen, welche Rollen berücksichtigt werden sollen.
-	EN	Choose whether you want to use a single, configurable artists list, or two lists for Album Artists and All Artists. Album Artists is a list where Album Artist is the sole artist on an album or is the artist specified in the ALBUMARTIST tag. All Artists is a list of every artist that appears in a contributor role tag (ARTIST, COMPOSER etc.). The single, configurable list of artists on the other hand let's you define which contributor roles should be part of the Artists menu.
+	EN	Choose whether you want to use a single, configurable artists list, or two lists for Album Artists and All Artists. Album Artists is a list where Album Artist is the sole artist on an album or is the artist specified in the ALBUMARTIST tag. All Artists is a list of every artist that appears in a contributor role tag (ARTIST, COMPOSER etc.). The single, configurable list of artists on the other hand lets you define which contributor roles should be part of the Artists menu.
 	FR	Choisissez si vous voulez avoir une seule liste configurable d'artistes, ou une pour l'Artistes des Albums et une autre pour tous les artistes. Artistes des Albums ne répertorie que l'artiste principal de chaque album. Tous les Artistes répertorie tous les artistes quel que soit leur rôle (ARTISTE, COMPOSITEUR etc.). La liste configurable Artistes vous permet de spécifier les rôles qui doivent être pris en compte.
 	NL	Kies of je een enkele, aan te passen lijst met artiesten wilt, of twee lijsten voor Albumartiesten en Alle Artiesten. Albumartiesten is een lijst waar de albumartiest de enige artiest op het album is, of is het de artiest die in de 'ALBUMARTIST tag' vermeld staat. Alle Artiesten is een lijst met alle artiesten die in een tag voorkomen met een uitvoerende rol (ARTIST, COMPOSER, enz.). Daarentegen kun je in de enkele, aan te passen lijst met artiesten aangeven welke uitvoerende rollen in de lijst moeten worden opgenomen.
 	NO	Velg om du vil ha én konfigurerbar Artister-liste, eller to lister for Albumartister og Alle artister. Albumartister er en liste hvor albumartisten enten er den eneste artisten på et album, eller artisten som er angitt av ALBUMARTIST-taggen. Alle artister er en liste over samtlige artister som er tagget som medvirkende (ARTIST, COMPOSER osv.). Velger du den enkeltstående, konfigurerbare artistlista, derimot, kan du velge hvilke medvirkende roller som skal føres opp i lista.
@@ -8408,6 +8413,28 @@ SETUP_ENABLE_STATISTICS
 	RU	Включить статистику медиатеки
 	SV	Aktivera biblioteksstatistik
 	ZH_CN	启用库存统计
+
+SETUP_ENHANCEDHTTP
+	EN	Streaming mode for HTTP(S)
+	FR	Mode de streaming HTTP(S)
+
+SETUP_ENHANCEDHTTP_DESC
+	DE	Logitech Media Server kann HTTP(S) Datenströme mit definierter Länge (Podcasts, einzelne Lieder) im Dateisystem zwischenspeichern. Sie würden wieder gelöscht, sobald der Strom zu Ende gespielt ist. Dies erhöht die Zuverlässigkeit mit einigen Anbietern, kann aber das Dateisystem zusätzlich belasten (z.B. wenn eine SD Karte verwendet wird).
+	EN	When a HTTP(S) connection to a server fails, Logitech Media Server terminates playback. It can also try to re-open it (Persistent mode) or it can buffer streams (Cache mode) of defined length (podcasts, single tracks) on disk files. These will be removed once the stream has been played. This can improve the reliability with some servers that expect tracks to be downloaded, not streamed and thus close long connections. But it also does cause more writing to the file system, which could potentially wear out e.g. SD cards. If you have enough space for buffering files, then "Cache" mode is the way to go
+	FR	Lorsqu'une connexion HTTP(S) échoue, Logitech Media Server termine le streaming. Il peut aussi essayer de re-ouvrir la connection (Mode persistent) ou mettre en tampon (Cacher) sur disque les flux dont la taille est connue (podcasts, piste individuelles). Chaque fichier tampon est supprimé à la fin du streaming. Ceci peut améliorer la connection avec certains serveurs qui attendent que les pistes soient téléchargées et non en flux et qui ferment les sessions longues. Mais l'écriture sur disque peut l'endommager à long terme (cartes SD). Le mode "Cacher" est le meilleur si vous avez de la place disque.
+
+SETUP_ENABLE_PERSISTENTHTTP
+	EN	Persistent mode
+	FR	Mode persistent
+
+SETUP_ENABLE_BUFFEREDHTTP
+	DE	HTTP(S) Datenströme zwischenspeichern
+	EN	Cache HTTP(S) streams on disk
+	FR	Cacher les flux HTTP(S) sur disque
+
+SETUP_DISABLE_ENHANCEDHTTP
+	EN	Normal streaming
+	FR	Streaming normal
 
 SETUP_LONGDATEFORMAT
 	CS	Formát dlouhého data
@@ -10709,6 +10736,10 @@ STEREOXL
 	PL	StereoXL
 	RU	Режим StereoXL
 	SV	StereoXL
+
+BALANCE
+	EN	Balance
+	FR	Balance
 
 PITCH
 	CS	Tón
@@ -14057,8 +14088,8 @@ SERVER_STATUS_DESC
 	SV	Information om alla identifierade enheter som anslutits till Logitech Media Server
 
 RADIO_NEEDS_PATCH
-	DE	Sie scheinen ein Squeezebox Radio mit veralteter Firmware zu verwenden, welche diese Logitech Media Server Version nicht als kompatibel akzeptiert. Bitte patchen Sie das Gerät. <a href="/html/docs/radio-compatibility.html" target="_blank">Weitere Informationen.</a>
-	EN	You seem to be using a Radio with an outdated firmware, not recognizing this version of Logitech Media Server. Please consider patching it. <a href="/html/docs/radio-compatibility.html" target="_blank">Get more information.</a>
+	DE	Sie scheinen eine Squeezebox mit veralteter Firmware zu verwenden, welche diese Logitech Media Server Version nicht als kompatibel akzeptiert. Es wird empfohlen, entweder das Community Firmware Plugin zu verwenden, oder die Firmware zu patchen (<a href="/html/docs/radio-compatibility.html" target="_blank">weitere Informationen</a>).
+	EN	You seem to be using a Squeezebox with an outdated firmware, not recognizing this version of Logitech Media Server. Please consider using the Community Firmware plugin, or patching the device's firmware (<a href="/html/docs/radio-compatibility.html" target="_blank">get more information</a>).
 	SV	Du verkar använda en Squeezebox Radio med ett gammalt hårdvaruprogram som inte är kompatibelt med den här Logitech Media Server-versionen. Apparaten behöver uppdateras. <a href="/html/docs/radio-compatibility.html" target="_blank">Mer information.</a>
 
 BASIC_SERVER_SETTINGS
@@ -19303,6 +19334,18 @@ SETUP_SERVERPRIORITY
 	SV	Serverprioritet
 	ZH_CN	Logitech Media Server服务器流程优先值
 
+SETUP_SHUFFLE_METHOD
+	DE	Mischmethode
+	EN	Shuffle method
+
+SETUP_USE_BALANCED_SHUFFLE
+	DE	Ausbalancierter, aber langsamer mischen
+	EN	Use more balanced, but slower shuffle
+
+SETUP_USE_FASTER_SHUFFLE
+	DE	Schneller, aber weniger ausbalanciert mischen
+	EN	Use faster, but less balanced shuffle
+
 SETUP_SERVERPRIORITY_DESC
 	CS	Můžete zadat prioritu pro Logitech Media Server.
 	DA	Du kan specificere hvilken prioritet Logitech Media Server skal have.
@@ -21391,7 +21434,7 @@ MERGEVA_PROGRESS
 
 UPDATESTANDALONEARTWORK_PROGRESS
 	DE	Nach aktualisierten Plattenhüllen suchen
-	EN	Find updated coverart files
+	EN	Find Updated Coverart Files
 	FR	Recherche des pochettes des albums actualisés
 	NL	Vind geüpdatete albumcovers
 	NO	Finn oppdaterte plateomslagsfiler
@@ -21505,7 +21548,7 @@ IMPORTER_PROGRESS_DESC
 
 VIRTUALLIBRARIES_PROGRESS
 	DE	Musiksammlungs-Ansichten erstellen
-	EN	Create library views
+	EN	Create Library Views
 	FR	Création d'une bibliothèque thématique
 	NL	Deelcollectie maken
 	NO	Lag delbibliotek

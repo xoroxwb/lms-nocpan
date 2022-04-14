@@ -518,7 +518,7 @@ sub indexHandler {
 
 					my $url = $params->{'entryurl'};
 
-					if ($url !~ /^http:/) {
+					if ($url !~ /^https?:/) {
 
 						if ($url !~ /\.(xml|opml|rss)$/) {
 
@@ -891,17 +891,16 @@ sub cliAdd {
 		}
 
 		# show feedback to jive
-		$client->showBriefly({
-			jive => {
-			type => 'mixed',
-			style => 'favorite',
-			#'icon-id' => $icon ? $icon : '/html/images/cover.png',
-			'icon' => $icon || $favs->icon($url),
-			text => [ $client->string('FAVORITES_ADDING'),
-					$title,
-				   ],
-			},
-		});
+		if ($request->source && $request->source =~ /\/slim\/request/) {
+			$client->showBriefly({
+				jive => {
+					type => 'mixed',
+					style => 'favorite',
+					'icon' => $icon || $favs->icon($url),
+					text => [ $client->string('FAVORITES_ADDING'), $title ],
+				},
+			});
+		}
 
 		$request->setStatusDone();
 
@@ -937,8 +936,9 @@ sub cliDelete {
 			return;
 		}
 	}
-
-	$favs->deleteIndex($index);
+	else {
+		$favs->deleteIndex($index);
+	}
 
 	# show feedback if this action came from jive cometd session
 	if ($request->source && $request->source =~ /\/slim\/request/) {
