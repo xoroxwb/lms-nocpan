@@ -68,6 +68,7 @@ sub initPlugin {
 		provider => Slim::Plugin::Podcast::PodcastIndex->getName(),
 		newSince => 7,
 		maxNew => 7,
+		country => '',
 	});
 
 	if (main::WEBUI) {
@@ -168,6 +169,8 @@ sub handleFeed {
 
 	# then existing feeds
 	my @feeds = @{$prefs->get('feeds')};
+	my @need;
+	my $fetch;
 
 	foreach ( @feeds ) {
 		my $url = $_->{value};
@@ -183,22 +186,38 @@ sub handleFeed {
 			playlist => $url,
 		};
 
+		# if pre-cached feed data is missing, initiate retrieval
 		unless ($image && $cache->get('podcast_moreInfo_' . $url)) {
-			Slim::Formats::XML->getFeedAsync(
-				sub {
-					_precacheShowDetails($url, $_[0]);
-				},
-				sub {
-					$log->warn("can't get $url RSS feed information: ", $_[0]);
-				},
-				{
-					parser => 'Slim::Plugin::Podcast::Parser',
-					url => $_->{value},
-					expires => 86400
-				}
-			);
+			# cache a placeholder image & moreInfo to guard against retrieving
+			# the feed multiple times while browsing within the podcast menu
+			# they will be replaced with real data after feed is successfully retrieved
+			$cache->set('podcast-rss-' . $url, __PACKAGE__->_pluginDataFor('icon'), '1days');
+			$cache->set('podcast_moreInfo_' . $url, {}, '1days');
+			push (@need, $url);
 		}
 	}
+
+	# get missing cache images & moreinfo if any
+	# each feed is retrieved and parsed sequentially, to limit loading on modestly powered servers
+	$fetch = sub {
+		my $url = pop @need;
+		Slim::Formats::XML->getFeedAsync(
+			sub {
+				# called by feed parser, so not needed here
+				# precacheFeedData($url, $_[0]);
+				$fetch->();
+			},
+			sub {
+				$log->warn("can't get $url RSS feed information: ", $_[0]);
+				$fetch->();
+			},
+			{
+				parser  => 'Slim::Plugin::Podcast::Parser',
+				url     => $url,
+			}
+		) if $url;
+	};
+	$fetch->();
 
 	$cb->({
 		items => $items,
@@ -283,7 +302,7 @@ sub searchHandler {
 				$feed->{parser} ||= 'Slim::Plugin::Podcast::Parser';
 				push @$items, $feed;
 
-				_precacheShowDetails($feed->{url}, $feed);
+				precacheFeedData($feed->{url}, $feed);
 			}
 
 			push @$items, { name => cstring($client, 'EMPTY') } if !scalar @$items;
@@ -312,16 +331,21 @@ sub searchHandler {
 	)->get($url, @$headers);
 }
 
-sub _precacheShowDetails {
+sub precacheFeedData {
 	my ($url, $feed) = @_;
+	# sanity check
+	unless (defined($url) && (ref($feed) eq 'HASH')) {
+		$log->error("Unexpected feed data for URL '$url'");
+		return;
+	}
 
-	if (my $image = $feed->{image}) {
-		$cache->set('podcast-rss-' . $url, $image, '90days');
-	}
-	else {
-		# always cache image to avoid sending a flood of requests
-		$cache->set('podcast-rss-' . $url, __PACKAGE__->_pluginDataFor('icon'), '1days');
-	}
+	# keep image for around 90 days, randomizing cache period to
+	# avoid flood of simultaneous requests in future
+	# it is not mandatory that a podcast include an image, so set
+	# suitable default
+	my $image = $feed->{image} || __PACKAGE__->_pluginDataFor('icon');
+	my $cacheTime = sprintf("%.3f days", 80 + rand(20));
+	$cache->set('podcast-rss-' . $url, $image, $cacheTime);
 
 	# pre-cache some additional information to be shown in feed info menu
 	my %moreInfo;
@@ -332,7 +356,9 @@ sub _precacheShowDetails {
 		}
 	}
 
-	$cache->set('podcast_moreInfo_' . $url, \%moreInfo);
+	# keep moreInfo for around 90 days, same as image
+	# it will not change often
+	$cache->set('podcast_moreInfo_' . $url, \%moreInfo, $cacheTime);
 }
 
 sub registerProvider {
@@ -375,39 +401,35 @@ sub getDisplayName {
 sub trackInfoMenu {
 	my ( $client, $url, $track, $remoteMeta ) = @_;
 
-	return unless $url && $client && $client->isPlaying;
+	return unless unwrapUrl($url) && $client && $client->isPlaying;
 
 	my $song = Slim::Player::Source::playingSong($client);
 	return unless $song && $song->canSeek;
 
-	if ( $url && defined $cache->get('podcast-' . $url) ) {
-		my $title = $client->string('PLUGIN_PODCAST_SKIP_BACK', $prefs->get('skipSecs'));
+	my $title = $client->string('PLUGIN_PODCAST_SKIP_BACK', $prefs->get('skipSecs'));
 
-		return [{
-			name => $title,
-			url  => sub {
-				my ($client, $cb, $params) = @_;
+	return [{
+		name => $title,
+		url  => sub {
+			my ($client, $cb, $params) = @_;
 
-				my $position = Slim::Player::Source::songTime($client);
-				my $newPos   = $position > $prefs->get('skipSecs') ? $position - $prefs->get('skipSecs') : 0;
+			my $position = Slim::Player::Source::songTime($client);
+			my $newPos   = $position > $prefs->get('skipSecs') ? $position - $prefs->get('skipSecs') : 0;
 
-				main::DEBUGLOG && $log->is_debug && $log->debug(sprintf("Skipping from position %s back to %s", $position, $newPos));
+			main::DEBUGLOG && $log->is_debug && $log->debug(sprintf("Skipping from position %s back to %s", $position, $newPos));
 
-				Slim::Player::Source::gototime($client, $newPos);
+			Slim::Player::Source::gototime($client, $newPos);
 
-				$cb->({
-					items => [{
-						name        => $title,
-						showBriefly => 1,
-						nowPlaying  => 1, # then return to Now Playing
-					}]
-				});
-			},
-			nextWindow => 'parent',
-		}];
-	}
-
-	return;
+			$cb->({
+				items => [{
+					name        => $title,
+					showBriefly => 1,
+					nowPlaying  => 1, # then return to Now Playing
+				}]
+			});
+		},
+		nextWindow => 'parent',
+	}];
 }
 
 sub showInfo {

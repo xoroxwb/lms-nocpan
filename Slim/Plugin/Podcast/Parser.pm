@@ -11,6 +11,8 @@ use Slim::Utils::Cache;
 use Slim::Utils::DateTime;
 use Slim::Utils::Strings qw(cstring);
 
+use Slim::Plugin::Podcast::Plugin;
+
 my $cache = Slim::Utils::Cache->new;
 
 my $fetching;
@@ -23,6 +25,10 @@ sub parse {
 
 	# don't use eval() - caller is Slim::Formats::XML is doing so already
 	my $feed = Slim::Formats::XML::parseXMLIntoFeed( $http->contentRef, $http->headers()->content_type );
+
+	# refresh precached image & more info data - keeps them up to date
+	my $feedUrl = $http->params->{params}->{url};
+	Slim::Plugin::Podcast::Plugin::precacheFeedData($feedUrl, $feed);
 
 	foreach my $item ( @{$feed->{items}} ) {
 		if ($item->{type} && $item->{type} eq 'link') {
@@ -79,7 +85,7 @@ sub parse {
 			$position =~ s/^0+[:\.]//;
 			
 			# remote_image is now cached, so replace enclosure with a play attribute 
-			# so that XMLBrowser to show sub-menu *and* we can play from top
+			# so that XMLBrowser shows a sub-menu *and* we can play from top
 			my $enclosure = delete $item->{enclosure};
 			$item->{on_select} = 'play';
 			$item->{play} = Slim::Plugin::Podcast::Plugin::wrapUrl($url);
